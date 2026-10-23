@@ -67,8 +67,11 @@ class Inc_Learning_Appr:
         self.pre_train_process(t, trn_loader)
         self.train_loop(t, trn_loader, val_loader)
         self.post_train_process(t, trn_loader)
-        save_model_path = os.path.join('./model_path','task_'+str(t)+'.pth')
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'model_path')
+        os.makedirs(model_dir, exist_ok=True)
+        save_model_path = os.path.join(model_dir, 'task_' + str(t) + '.pth')
         torch.save(self.model.state_dict(),save_model_path)
+        print('Model saved: ' + save_model_path, flush=True)
 
 
     def pre_train_process(self, t, trn_loader):

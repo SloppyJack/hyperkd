@@ -149,6 +149,13 @@ class Appr(Inc_Learning_Appr):
             ce = ce.mean()
         return ce
 
+    '''
+    t：当前任务编号，从 0 开始
+    outputs：新网络各任务分类头输出的 logits
+    targets：样本真实类别标签
+    outputs_old：旧网络各分类头输出的 logits
+    cross_out：新网络特征经过旧分类头得到的 logits
+    '''
     def criterion(self, t, outputs, targets, outputs_old=None,cross_out=None):
         """Returns the loss value"""
         loss = 0
@@ -159,6 +166,7 @@ class Appr(Inc_Learning_Appr):
             loss += self.lamb * self.cross_entropy(torch.cat(outputs[:t], dim=1),
                                                    torch.cat(outputs_old[:t], dim=1), exp=1.0 / self.T)
         # Current cross-entropy loss -- with exemplars use all heads
+        # 有旧样本回放：在全部已见类别上计算分类损失
         if len(self.exemplars_dataset) > 0:
             return loss + torch.nn.functional.cross_entropy(torch.cat(outputs, dim=1), targets)
         return loss + torch.nn.functional.cross_entropy(outputs[t], targets - self.model.task_offset[t])

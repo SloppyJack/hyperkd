@@ -19,14 +19,17 @@ class ExemplarsDataset(MemoryDataset):
 
     # Returns a parser containing the approach specific parameters
     @staticmethod
-    def extra_parser(args):
+    def extra_parser(args, hyperkd_defaults=False):
         parser = ArgumentParser("Exemplars Management Parameters")
         _group = parser.add_mutually_exclusive_group()
         _group.add_argument('--num-exemplars', default=0, type=int, required=False,
                             help='Fixed memory, total number of exemplars (default=%(default)s)')
-        _group.add_argument('--num-exemplars-per-class', default=0, type=int, required=False,
+        _group.add_argument('--num-exemplars-per-class',
+                            default=5 if hyperkd_defaults and not any(
+                                arg == '--num-exemplars' or arg.startswith('--num-exemplars=')
+                                for arg in args) else 0, type=int, required=False,
                             help='Growing memory, number of exemplars per class (default=%(default)s)')
-        parser.add_argument('--exemplar-selection', default='random', type=str,
+        parser.add_argument('--exemplar-selection', default='ssgd' if hyperkd_defaults else 'random', type=str,
                             choices=['herding', 'random', 'entropy', 'distance','ssgd'],
                             required=False, help='Exemplar selection strategy (default=%(default)s)')
         return parser.parse_known_args(args)

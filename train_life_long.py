@@ -17,7 +17,9 @@ from datasets.my_dataset import get_loader
 
 parser = argparse.ArgumentParser("HSI")
 #dataset args
-parser.add_argument('--batch_size', type=int, default=64, help='number of batch size')
+parser.add_argument('--data-dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'prepared'),
+                    type=str, help='Directory containing prepared input/TR/TE MAT files')
+parser.add_argument('--batch_size', type=int, default=128, help='number of batch size')
 #parser.add_argument('--nc_first_task', default=None, type=int, required=False,
 #                        help='Number of classes of the first task (default=%(default)s)')
 parser.add_argument('--stop_at_task', default=0, type=int, required=False,
@@ -30,9 +32,9 @@ parser.add_argument('--band_patches', type=int, default=3, help='number of relat
 #parser.add_argument('--max_band', type=int, default=224, help='number of band')
 
 # training args
-parser.add_argument('--approach', default='finetuning', type=str, choices=approach.__all__,
+parser.add_argument('--approach', default='our', type=str, choices=approach.__all__,
                         help='Learning approach used (default=%(default)s)', metavar="APPROACH")
-parser.add_argument('--nepochs', type=int, default=300, help='epoch number')
+parser.add_argument('--nepochs', type=int, default=150, help='Epochs per task (default: 150; use 2 for a smoke run)')
 parser.add_argument('--lr', default=5e-4, type=float, required=False,
                         help='Starting learning rate (default=%(default)s)')
 parser.add_argument('--lr_min', default=1e-8, type=float, required=False,
@@ -55,7 +57,7 @@ parser.add_argument('--multi_softmax', action='store_true',
                         help='Apply separate softmax for each task (default=%(default)s)')
 parser.add_argument('--fix_bn', action='store_true',
                         help='Fix batch normalization after first task (default=%(default)s)')
-parser.add_argument('--eval_on_train', action='store_true',
+parser.add_argument('--eval_on_train', action='store_true', default=True,
                         help='Show train loss and accuracy (default=%(default)s)')
 #miscellaneous args
 parser.add_argument('--seed', type=int, default=0, help='number of seed')
@@ -99,7 +101,19 @@ print('=' * 108)
 all_datasets =['Pavia','Indian','Salinas','Houston']
 #dataname_to_trainpath = {'Indian':'./data/Indian_pines_train.mat', 'Houston':'./data/Houston_train.mat','Salinas':'./data/Salinas_train.mat','Pavia':'./data/Pavia_train.mat'}
 #dataname_to_testpath = {'Indian':'./data/Indian_pines_test.mat', 'Houston':'./data/Houston_test.mat','Salinas':'./data/Salinas_test.mat','Pavia':'./data/Pavia_test.mat'}
-dataname_to_path = {'Indian':'./data/IndianPine.mat', 'Houston':'./data/Houston.mat','Salinas':'./data/Salinas.mat','Pavia':'./data/Pavia.mat'}
+dataname_to_path = {name: os.path.join(args.data_dir, filename) for name, filename in
+                    {'Indian': 'IndianPine.mat', 'Houston': 'Houston.mat',
+                     'Salinas': 'Salinas.mat', 'Pavia': 'Pavia.mat'}.items()}
+print('Training script: ' + os.path.abspath(__file__), flush=True)
+print('Prepared data directory: ' + os.path.abspath(os.path.expanduser(args.data_dir)), flush=True)
+missing_data = [os.path.abspath(os.path.expanduser(dataname_to_path[name]))
+                for name in all_datasets
+                if not os.path.isfile(os.path.expanduser(dataname_to_path[name]))]
+if missing_data:
+    raise FileNotFoundError(
+        'Missing prepared MAT files:\n' + '\n'.join(missing_data) +
+        '\nRun prepare_data.py on the server first, then use '
+        '--data-dir=/root/hyperkd/data/prepared. Do not rename raw MAT files.')
 label_offset = 0
 trn_loader=[]
 tst_loader=[]
@@ -164,7 +178,8 @@ from datasets.exemplars_dataset import ExemplarsDataset
 Appr_ExemplarsDataset = Appr.exemplars_dataset_class()
 if Appr_ExemplarsDataset:
     assert issubclass(Appr_ExemplarsDataset, ExemplarsDataset)
-    appr_exemplars_dataset_args, extra_args = Appr_ExemplarsDataset.extra_parser(extra_args)
+    appr_exemplars_dataset_args, extra_args = Appr_ExemplarsDataset.extra_parser(
+        extra_args, hyperkd_defaults=(args.approach == 'our'))
     print('Exemplars dataset arguments =')
     for arg in np.sort(list(vars(appr_exemplars_dataset_args).keys())):
         print('\t' + arg + ':', getattr(appr_exemplars_dataset_args, arg))

@@ -359,6 +359,15 @@ class SsgdExemplarsSelector(ExemplarsSelector):
         return result
 '''
 
+"""
+基于 SSGD 距离进行 MMCS 样本选择。
+
+对每个类别：
+1. 计算该类别的平均样本；
+2. 用 SSGD 衡量各样本与平均样本的距离；
+3. 交替选择最近、最远的未选样本；
+4. 返回选中样本在 sel_loader 遍历结果中的索引。
+"""
 class SsgdExemplarsSelector(ExemplarsSelector):
     """Selection of new samples. This is based on random selection, which produces a random list of samples."""
 
@@ -366,53 +375,71 @@ class SsgdExemplarsSelector(ExemplarsSelector):
         super().__init__(exemplars_dataset)
 
     def _select_indices(self, model: LLL_Net, sel_loader: DataLoader, exemplars_per_class: int, transform) -> Iterable:
+        # 当前模型已经学习过的类别总数：
         num_cls = sum(model.task_cls)
+        # 最终结果：最近、最远样本索引
         result = []
         all_samples =[]
         all_labels = []
+        # images.shape = batch x b x height x width，b为光谱波段数
         for images, targets in sel_loader:
             all_samples.append(images)
             all_labels.extend(targets)
+        # 拼接所有批次
         all_samples = torch.cat(all_samples)
         all_labels = np.array(all_labels)
         _,b,h,w = all_samples.shape
+        # images.shape -> batch x height x width x b
         all_samples = all_samples.permute(0,2,3,1)
+        # 生成以 (0,0) 为中心的坐标点 (x_i, y_j)
         gauss_coords_h = torch.arange(h) - int((h - 1) / 2)
         gauss_coords_w = torch.arange(w) - int((w - 1) / 2)
         gauss_x, gauss_y = torch.meshgrid([gauss_coords_h, gauss_coords_w])
+
+        # 标准差 σ
         sigma = 1
+        # 样本块内不同位置的每个像素的权重定义，坐标 (x_i, y_j) 离中心点 (0, 0) 越远，权重dist_weight越小
+        # 对应alg1中公式(1): G(i, j) = exp(-(i² + j²) / (2 * σ²))
         dis_weight=torch.exp(torch.true_divide(-(gauss_x ** 2 + gauss_y ** 2), (2 * sigma ** 2)))
+
         for curr_cls in range(num_cls):
             # get all indices from current class -- check if there are exemplars from previous task in the loader
+            # 找到当前类别在全部候选样本中的索引
             cls_ind = np.where(all_labels == curr_cls)[0]
             assert (len(cls_ind) > 0), "No samples to choose from for class {:d}".format(curr_cls)
             assert (exemplars_per_class <= len(cls_ind)), "Not enough samples to store"
             samples = all_samples[cls_ind]
+            # 当前类别的样本均值。对应alg1中公式(3)
+            # samples.shap -> batch x height x width x b
             samples_mean = samples.mean(0)
             selected = []
             selected_samples = []
             for k in range(exemplars_per_class):
                 # fix this to the dimension of the model features
+                # sel_max为选取最近或最远标识。k为奇数求最大值，k为偶数求最小值
                 sel_max = k % 2
                 dist_min = np.inf
                 dist_max = 0
                 # choose the closest to the mean of the current class
                 for item in cls_ind:
                     if item not in selected:
-                        feat = all_samples[item]
-                        dist_patch = torch.norm(samples_mean - feat ,dim=2)
+                        # 当前候选图像块， shap = [H, W, B]
+                        sample_patch = all_samples[item]
+                        # 沿dim=2波段维度，求候选图像块与mean图像块L2距离（欧式距离）
+                        dist_patch = torch.norm(samples_mean - sample_patch ,dim=2)
                         dist = dist_patch * dis_weight
+                        # 距离求和。对应alg1中公式(3): SSGD(x, y)
                         dist = dist.sum()
                         if sel_max:
                             if dist > dist_max:
                                 dist_max = dist
                                 newone = item
-                                newonefeat = feat
+                                newonefeat = sample_patch
                         else:
                             if dist < dist_min:
                                 dist_min = dist
                                 newone = item
-                                newonefeat = feat
+                                newonefeat = sample_patch
 
                 selected_samples.append(newonefeat)
                 selected.append(newone)
