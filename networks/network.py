@@ -41,25 +41,18 @@ class LLL_Net(nn.Module):
         self._initialize_weights()
 
     def add_head(self, num_outputs):
-        """Add a new head with the corresponding number of outputs. Also update the number of classes per task and the
-        corresponding offsets
-        """
+        # 添加多个全连接层，也可认为多个分类头
         self.heads.append(nn.Linear(self.out_size, num_outputs))
         # we re-compute instead of append in case an approach makes changes to the heads
         self.task_cls = torch.tensor([head.out_features for head in self.heads])
         self.task_offset = torch.cat([torch.LongTensor(1).zero_(), self.task_cls.cumsum(0)[:-1]])
 
     def forward(self, x, return_features=False):
-        """Applies the forward pass
-
-        Simplification to work on multi-head only -- returns all head outputs in a list
-        Args:
-            x (tensor): input images
-            return_features (bool): return the representations before the heads
-        """
         x = self.model(x)
         assert (len(self.heads) > 0), "Cannot access any head"
-        y = []
+        y = [] # 多个分类头得到的logits
+        print("当前任务：", t)
+        print("分类头数量：", len(self.model.heads))
         for head in self.heads:
             y.append(head(x))
         if return_features:

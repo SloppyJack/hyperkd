@@ -34,7 +34,7 @@ parser.add_argument('--band_patches', type=int, default=3, help='number of relat
 # training args
 parser.add_argument('--approach', default='our', type=str, choices=approach.__all__,
                         help='Learning approach used (default=%(default)s)', metavar="APPROACH")
-parser.add_argument('--nepochs', type=int, default=150, help='Epochs per task (default: 150; use 2 for a smoke run)')
+parser.add_argument('--nepochs', type=int, default=2, help='Epochs per task (default: 150; use 2 for a smoke run)')
 parser.add_argument('--lr', default=5e-4, type=float, required=False,
                         help='Starting learning rate (default=%(default)s)')
 parser.add_argument('--lr_min', default=1e-8, type=float, required=False,

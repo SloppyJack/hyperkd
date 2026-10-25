@@ -84,6 +84,12 @@ class LSGAttention(nn.Module):
     def extra_repr(self) -> str:
         return f'dim={self.dim}, num_heads={self.num_heads}'
 
+"""
+特征提取器核心部分
+LSGAVITBlock: Light Self-Gauss-Attention Vision Transformer Block
+1. 通过 LSGAttention，让不同 Token 之间进行特征信息交互。
+2. 通过 MLP，对每个 Token 的特征进行进一步的非线性变换。
+"""
 class LSGAVITBlock(nn.Module):
     def __init__(self, dim, input_resolution, num_heads,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
@@ -106,11 +112,12 @@ class LSGAVITBlock(nn.Module):
 
     def forward(self, x):
         H, W = self.input_resolution
+        # x.shape 为 128x49x120
         B, L, C = x.shape
         assert L == H * W
         shortcut = x
         x = self.norm1(x)
-        x = self.attn(x)
+        x = self.attn(x)    # 注意力机制将49个Token，特征进行聚合
         x = shortcut + self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -255,6 +262,7 @@ class PatchEmbed(nn.Module):
         x = self.conv3d_features(x)
         x = x.view(B, -1, H, W)
         x = self.conv2d_features(x)  # x
+        # 128x120x7x7 -> 128x120x49 -> 128x49x120
         x = x.flatten(2).transpose(1, 2)
 
         # x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
@@ -341,18 +349,23 @@ class LSGAVIT(nn.Module):
     def no_weight_decay(self):
         return {'absolute_pos_embed'}
 
+    # 将输入的高光谱图像转为特征向量
     def forward_features(self, x):
+        # 将高光谱图像块转换为特征序列：128x7x7x36 -> 128x49x120
         x = self.patch_embed(x)
+        # 如果启用了绝对位置编码，就加入位置信息
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
-
+        # 只有一个 BasicLayer，每个BasicLayer有两个LSGAVITBlock
         for layer in self.layers:
+            # LSGAVITBlock里面主要有注意力机制，进行特征融合
             x = layer(x)
 
         x = self.norm(x)  # B L C
-        x = self.avgpool(x.transpose(1, 2))  # B C 1
-        x = torch.flatten(x, 1)
+        # T：128x49x120 -> 128x120x49。再对49个token求平均，得到128x120x1
+        x = self.avgpool(x.transpose(1, 2))  # B C L
+        x = torch.flatten(x, 1) # 展平，得到128x120
         return x
 
     def forward(self, x):

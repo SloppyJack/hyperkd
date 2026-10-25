@@ -86,13 +86,14 @@ class Appr(Inc_Learning_Appr):
             # Forward old model
             targets_old = None
             cross_out =[]
+            # outputs为分类头，例如task0中为[120x9]。fea_new为新特征
             outputs,fea_new = self.model(images.to(self.device),return_features=True)
-            if t > 0:
+            if t > 0: # t可能取值为0~3
                 targets_old,fea_old = self.model_old(images.to(self.device),return_features=True)
                 old_heads = self.model_old.heads
                 for old_head in old_heads:
                     cross_out.append(old_head(fea_new))
-            # Forward current model
+            # calc loss
             loss = self.criterion(t, outputs, targets.to(self.device), targets_old,cross_out)
             # Backward
             self.optimizer.zero_grad()
@@ -151,15 +152,17 @@ class Appr(Inc_Learning_Appr):
 
     '''
     t：当前任务编号，从 0 开始
-    outputs：新网络各任务分类头输出的 logits
+    outputs：新网络各任务分类头输出的 logits。
     targets：样本真实类别标签
     outputs_old：旧网络各分类头输出的 logits
     cross_out：新网络特征经过旧分类头得到的 logits
     '''
     def criterion(self, t, outputs, targets, outputs_old=None,cross_out=None):
+        # 真实的outputs：[torch.Size([128, 9]), torch.Size([128, 16]), torch.Size([128, 16]), torch.Size([128, 15])]
+        # 拼接后：torch.Size([128, 56])
         """Returns the loss value"""
         loss = 0
-        if t > 0:
+        if t > 0: # t可能取值0~3
             # Knowledge distillation loss for all previous tasks
             loss += self.lamb *0.95* self.cross_entropy(torch.cat(cross_out[:t], dim=1),
                                                    torch.cat(outputs_old[:t], dim=1), exp=1.0 / self.T)

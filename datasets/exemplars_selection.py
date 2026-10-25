@@ -381,11 +381,11 @@ class SsgdExemplarsSelector(ExemplarsSelector):
         result = []
         all_samples =[]
         all_labels = []
-        # images.shape = batch x b x height x width，b为光谱波段数
+        # images.shape = batch x b x height x width，b为光谱波段数。128 x 36 x 7 x7
         for images, targets in sel_loader:
             all_samples.append(images)
             all_labels.extend(targets)
-        # 拼接所有批次
+        # 拼接所有批次。拼接后shape：[3921, 36, 7, 7]
         all_samples = torch.cat(all_samples)
         all_labels = np.array(all_labels)
         _,b,h,w = all_samples.shape
