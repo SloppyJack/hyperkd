@@ -257,10 +257,13 @@ class PatchEmbed(nn.Module):
         # FIXME look at relaxing size constraints
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-
+        # 128x36x7x7 -> 128x1x36x7x7
         x = x.unsqueeze(1)
+        # 沿光谱波段和图像高和宽，conv3d卷积。得到128x4x36x7x7
         x = self.conv3d_features(x)
+        # 128x4x36x7x7 -> 128x144x7x7
         x = x.view(B, -1, H, W)
+        # 沿图像高和宽，conv2d卷积：128x4x36x7x7 -> 128x120x7x7
         x = self.conv2d_features(x)  # x
         # 128x120x7x7 -> 128x120x49 -> 128x49x120
         x = x.flatten(2).transpose(1, 2)
@@ -351,7 +354,7 @@ class LSGAVIT(nn.Module):
 
     # 将输入的高光谱图像转为特征向量
     def forward_features(self, x):
-        # 将高光谱图像块转换为特征序列：128x7x7x36 -> 128x49x120
+        # 将高光谱图像块转换为特征序列：128x36x7x7 -> 128x49x120
         x = self.patch_embed(x)
         # 如果启用了绝对位置编码，就加入位置信息
         if self.ape:

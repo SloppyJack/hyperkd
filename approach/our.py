@@ -86,12 +86,15 @@ class Appr(Inc_Learning_Appr):
             # Forward old model
             targets_old = None
             cross_out =[]
-            # outputs为分类头，例如task0中为[120x9]。fea_new为新特征
+            # outputs为新分类头，例如task0中为[120x9]。fea_new为新特征
+            # 新网络
             outputs,fea_new = self.model(images.to(self.device),return_features=True)
             if t > 0: # t可能取值为0~3
+                # 旧网络：HIS图像经过旧网络。fea_old为旧特征
                 targets_old,fea_old = self.model_old(images.to(self.device),return_features=True)
                 old_heads = self.model_old.heads
                 for old_head in old_heads:
+                    # 交叉网络：新特征丢给旧网络分类头输出logits
                     cross_out.append(old_head(fea_new))
             # calc loss
             loss = self.criterion(t, outputs, targets.to(self.device), targets_old,cross_out)
@@ -136,14 +139,16 @@ class Appr(Inc_Learning_Appr):
 
     def cross_entropy(self, outputs, targets, exp=1.0, size_average=True, eps=1e-5):
         """Calculates cross-entropy with temperature scaling"""
+        # functional.softmax()：将logits转为预测概率
         out = torch.nn.functional.softmax(outputs, dim=1)
         tar = torch.nn.functional.softmax(targets, dim=1)
-        if exp != 1:
+        if exp != 1:    # 进行温度Softmax：q_i ^ (1/T) / sum(q_j ^ (1/T))
             out = out.pow(exp)
             out = out / out.sum(1).view(-1, 1).expand_as(out)
             tar = tar.pow(exp)
             tar = tar / tar.sum(1).view(-1, 1).expand_as(tar)
-        out = out + eps / out.size(1)
+        out = out + eps / out.size(1) # 防止 out 中出现 0
+        # out逐行归一化
         out = out / out.sum(1).view(-1, 1).expand_as(out)
         ce = -(tar * out.log()).sum(1)
         if size_average:
@@ -170,6 +175,7 @@ class Appr(Inc_Learning_Appr):
                                                    torch.cat(outputs_old[:t], dim=1), exp=1.0 / self.T)
         # Current cross-entropy loss -- with exemplars use all heads
         # 有旧样本回放：在全部已见类别上计算分类损失
+        # 1) 交叉熵 L_CE：真实标签 x LogSoftmax，加负号后取均值
         if len(self.exemplars_dataset) > 0:
             return loss + torch.nn.functional.cross_entropy(torch.cat(outputs, dim=1), targets)
         return loss + torch.nn.functional.cross_entropy(outputs[t], targets - self.model.task_offset[t])
